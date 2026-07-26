@@ -78,7 +78,7 @@ document.querySelectorAll("#article h1[id], #article h2[id]").forEach((heading) 
   observer.observe(heading);
 });
 
-document.querySelectorAll("pre:not(:has(.mermaid))").forEach((pre) => {
+document.querySelectorAll("#article pre:not(:has(.mermaid))").forEach((pre) => {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "copy-code";

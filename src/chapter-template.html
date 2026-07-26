@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080b0a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="{{DESCRIPTION}}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="{{TITLE}} · Coding Agent 工程实践手册" />
+    <meta property="og:description" content="{{DESCRIPTION}}" />
+    <meta name="twitter:card" content="summary" />
+    <title>{{TITLE}} · Coding Agent 工程实践手册</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body class="chapter-page">
+    <div class="reading-progress" aria-hidden="true">
+      <span id="reading-progress-bar"></span>
+    </div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="返回首页">
+        <span class="brand-mark" aria-hidden="true">&gt;_</span>
+        <span>Kingname / Agent Notes</span>
+      </a>
+      <nav class="header-actions" aria-label="页面工具">
+        <a class="plain-link" href="/">全部章节</a>
+        <a class="github-link" href="https://github.com/kingname/kimi" target="_blank" rel="noreferrer">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
+            <path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.23c-3.22.7-3.9-1.36-3.9-1.36-.52-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.72 1.26 3.38.97.1-.75.4-1.26.74-1.55-2.57-.3-5.28-1.29-5.28-5.69 0-1.26.45-2.28 1.2-3.09-.12-.29-.52-1.47.11-3.05 0 0 .98-.32 3.16 1.18a10.99 10.99 0 0 1 5.75 0c2.19-1.5 3.16-1.18 3.16-1.18.63 1.58.23 2.76.11 3.05.75.81 1.2 1.83 1.2 3.09 0 4.41-2.71 5.39-5.29 5.68.42.36.79 1.06.79 2.14v3.25c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z"/>
+          </svg>
+          GitHub
+        </a>
+        <button class="menu-button" id="menu-button" type="button" aria-expanded="false" aria-controls="toc">
+          目录
+        </button>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="chapter-hero">
+        <a class="chapter-back" href="/">← 返回全部章节</a>
+        <div class="chapter-number">{{CHAPTER_NUMBER}}</div>
+        <h1>{{TITLE}}</h1>
+        <p>{{DESCRIPTION}}</p>
+        <div class="chapter-meta">
+          <span>{{READING_TIME}} 分钟</span>
+          <span>{{SOURCE_FILE}}</span>
+        </div>
+      </section>
+
+      <div class="page-shell chapter-shell">
+        <aside class="toc-panel" id="toc">
+          <div class="toc-heading">
+            <span>IN THIS CHAPTER</span>
+            <button id="toc-close" type="button" aria-label="关闭目录">×</button>
+          </div>
+          <nav class="toc-nav" aria-label="本章目录">
+            {{TOC}}
+          </nav>
+          <div class="toc-footer">
+            <a href="/markdown/{{SOURCE_FILE}}">查看 Markdown 源文档</a>
+            <span>Last updated</span>
+            <time datetime="{{UPDATED_ISO}}">{{UPDATED_DISPLAY}}</time>
+          </div>
+        </aside>
+
+        <article class="prose" id="article">
+          {{CONTENT}}
+          <nav class="chapter-pager" aria-label="章节翻页">
+            {{PREVIOUS_LINK}}
+            {{NEXT_LINK}}
+          </nav>
+        </article>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Copyright © 2026 青南. All rights reserved.</p>
+      <div>
+        <a href="https://github.com/kingname/kimi" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="/">全部章节</a>
+        <a href="#top">Back to top ↑</a>
+      </div>
+    </footer>
+
+    <div class="toc-backdrop" id="toc-backdrop"></div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

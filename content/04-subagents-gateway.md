@@ -176,4 +176,98 @@ model + provider + prompt/tool version + content hash
 
 > 不能保证。provider 后端、模型版本、采样实现、并行工具时序、搜索结果、文件状态都会变化。评测要固定可控变量、记录版本并多次运行；调试可以用 trace replay 隔离模型和环境。目标通常是统计稳定性，而非逐 token 一致。
 
+## Subagent 的收益来自隔离，不来自数量
+
+我判断是否拆 Subagent 时，会先估算三项成本：
+
+```text
+收益 = 被隔离的无关上下文 + 可并行的等待时间 + 专用权限带来的安全性
+成本 = 任务描述损耗 + 结果汇总损耗 + 额外模型调用 + 并发冲突风险
+```
+
+例如调查一次跨 `auth`、`billing`、`gateway` 三个模块的超时问题，三个只读 explore Agent 并行通常合理：它们各自读取大量日志和调用链，最后只返回证据。若任务是修改一个 80 行函数，拆成“分析 Agent、编码 Agent、审查 Agent”往往只是把一次本可连贯完成的推理切碎。
+
+### 一个可执行的子任务契约
+
+自然语言 prompt 不应是唯一契约。调度器还应持有结构化元数据：
+
+```yaml
+task_id: investigate-auth-refresh
+goal_revision: 7
+objective: 解释刷新请求为什么在高并发下重复发送
+inputs:
+  workspace_revision: 91e83d
+  evidence:
+    - artifact://trace/refresh-timeout
+scope:
+  read: [src/auth/**, tests/auth/**]
+  write: []
+capabilities: [read_file, search_text, run_readonly_test]
+deliverable_schema:
+  root_cause: string
+  evidence_refs: list
+  confidence: low | medium | high
+  unresolved: list
+budget:
+  max_turns: 16
+  max_tokens: 60000
+  deadline_seconds: 480
+```
+
+返回结果必须绑定 `workspace_revision` 和 `goal_revision`。如果主 Agent 在子任务运行期间已经修改相关文件，结果不能直接当作当前事实，只能作为历史线索重新验证。
+
+## 并发调度要看实际 effect，而不是 Agent 名字
+
+两个 `explore` Agent 通常只读，但它们仍可能同时启动构建、占用同一端口或污染共享缓存；两个 `coder` Agent 也可能因为独立 worktree 而完全不冲突。因此调度器应组合静态声明与运行时观测：
+
+```text
+declared_effects  = task contract + tool capabilities
+observed_effects  = 实际打开的路径、进程、端口、Git 状态
+conflict          = overlap(declared, observed, active_tasks)
+```
+
+发现未声明写入时，最安全的处理不是事后合并，而是立刻暂停该子任务并记录 policy violation。并发上限还要同时受 provider 配额、CPU、内存和用户级公平调度约束，不能只设一个 `max_agents=8`。
+
+## Gateway 的核心不是换 URL，而是保存语义
+
+模型 provider 的协议差异常被低估。一个内部 `tool_result` 在不同接口里可能要求：
+
+- 紧邻对应 tool call；
+- 使用特定 role；
+- 保留或删除中断的 reasoning block；
+- tool call ID 满足特定格式；
+- 并行调用按原顺序回填；
+- 图片、缓存标记和系统指令放在不同位置。
+
+因此 adapter 不只是字段重命名。它应执行一套可版本化转换：
+
+```text
+Internal IR
+→ capability negotiation
+→ history validation / repair
+→ provider-specific encoding
+→ streamed block assembly
+→ finish reason normalization
+→ usage and error normalization
+```
+
+我会把“修复历史”限制为保持语义的操作，例如为已明确中断的调用补一个 `interrupted` result。若无法确认 call/result 对应关系，Gateway 应拒绝请求，而不是猜测一个看起来能通过 provider 校验的历史。
+
+## 切换模型时应该重建哪些东西
+
+同一 session 从模型 A 切到模型 B，至少重新计算：
+
+| 项目 | 原因 |
+|---|---|
+| token 预算 | tokenizer 与窗口不同 |
+| tool schema 集合 | provider 能力与 schema 限制不同 |
+| system/tool 稳定前缀 | prompt cache 边界不同 |
+| 并行调用策略 | 有的模型更容易生成依赖冲突 |
+| 历史消息编码 | role、block 和 call/result 约束不同 |
+| completion policy 阈值 | 模型自报完成的可靠性可能不同 |
+
+但是任务目标、权限、workspace revision 和历史副作用不能随模型变化。模型是可替换决策器，Runtime 状态不是它的私有记忆。
+
+Kimi Code 的公开文档显示，Subagent 使用独立上下文，只将最终结果带回主 Agent；session 中每个 Agent 也有独立事件流用于恢复和 replay。这类设计的价值正是把上下文污染和运行状态分开，而不是简单增加并行度。参见 [Agents and Sub-Agents](https://moonshotai.github.io/kimi-code/en/customization/agents.html) 与 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)。
+
 ---

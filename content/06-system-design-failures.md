@@ -432,4 +432,76 @@ IDE 与 CLI 的差异：
 5. 发布类动作默认逐次批准；
 6. 用每个 crash point 的故障注入覆盖。
 
+## 把这些组件放回一条真实请求链
+
+单独讨论 Context Service、Model Gateway 或 Sandbox 很容易，每个组件都能画得很漂亮。真正的系统问题出现在它们共享一个任务状态时。一次云端 Coding Agent 请求可以按下面的顺序落地：
+
+```text
+1. Session Service 接收用户消息，写入 event log
+2. Session owner 取得带 fencing token 的 lease
+3. Context Builder 基于 goal revision 和 workspace revision 生成上下文
+4. Model Gateway 发起请求，流式事件只作为 provisional output
+5. Tool call 完整后进入 Policy，生成 effect 与 approval decision
+6. Scheduler 选择本地工具、MCP 或远程 sandbox
+7. Executor 写 started event，执行并生成 effect fingerprint
+8. terminal result 落盘后，才允许下一轮模型请求读取
+9. Completion Policy 对照 acceptance、diff 和验证产物
+10. Turn 完成，UI 通过 seq 收敛到同一状态
+```
+
+这里有几条跨组件约束：
+
+- Context Builder 只能读取已提交到事件流的 tool result，不能读取 UI 暂存状态；
+- Scheduler 不能因为模型输出了“parallel”就跳过 effect 冲突检测；
+- Sandbox 完成不等于任务完成，产物仍要经过 verifier；
+- UI 断线不应改变任务所有权，用户明确 cancel 才改变执行状态；
+- Model Gateway 重试不能创建新的逻辑 tool action；
+- 所有成本、延迟和失败都要能归到同一个 session/turn/action。
+
+## 容量估算里真正昂贵的不是 HTTP QPS
+
+假设峰值有 20,000 个活跃 session，每个 session 平均：
+
+- 1 个进行中的模型请求；
+- 0.3 个活跃 Shell/测试进程；
+- 2 个长连接订阅者；
+- 50 KB/s 的工具日志峰值；
+- 120k 输入 token 和 8k 输出 token 的高分位预算。
+
+需要重点保护的是：
+
+1. **Provider 并发与 token throughput。** 同样 1 QPS，大上下文请求占用的容量可能相差几十倍；
+2. **Sandbox slot。** 测试任务会长期占用 CPU、内存和磁盘，不能用普通请求队列调度；
+3. **日志与 artifact 写入。** 20,000 × 50 KB/s 已经是 1 GB/s 峰值，必须限流、截断和异步落对象存储；
+4. **长连接 fan-out。** WebSocket 是投影视图，不能让慢客户端反压 session 执行；
+5. **恢复风暴。** provider 或区域故障后，大量 session 同时 retry/resume，需要 jitter、租户公平性和全局熔断。
+
+因此容量单位不应只有 request。至少还要有 `input_tokens`、`output_tokens`、`sandbox_cpu_seconds`、`artifact_bytes` 和 `active_session_slots`。
+
+## 从单机演进到多租户时，我不会一开始拆微服务
+
+一个本地 CLI 的合理起点是：
+
+```text
+单进程 Runtime
++ SQLite/JSONL 事件
++ 本地 artifact 目录
++ 子进程 executor
++ 明确的 provider/tool adapter
+```
+
+先把状态边界和接口稳定下来。需要远程长任务时，可以把 executor 与 session owner 移到 daemon；需要多租户时，再根据隔离和负载拆出 Sandbox Scheduler、Artifact Store、Model Gateway。过早拆服务不会自动得到恢复能力，只会把本地事务变成分布式一致性问题。
+
+拆分顺序应由压力决定：
+
+| 压力 | 优先拆出的边界 |
+|---|---|
+| 不可信代码与资源竞争 | Sandbox / Executor |
+| 多 provider 配额与成本 | Model Gateway |
+| 大体积日志与 patch | Artifact Store |
+| 大量断线恢复和多端 UI | Session Service |
+| 离线实验吞吐 | Eval Runner |
+
+架构成熟度不体现在服务数量，而体现在把组件放回单进程后，语义仍然清楚；把组件拆到多机后，不变量仍然成立。
+
 ---

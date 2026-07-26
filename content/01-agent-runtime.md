@@ -173,7 +173,7 @@ async def run_turn(session, user_input):
 - **资源耗尽：** step、token、成本、时间、重试预算到达上限；
 - **不可恢复失败：** 环境损坏、权限拒绝、确定性错误无法绕过。
 
-回答时强调“宁可显式 handoff，也不能无限循环”。循环检测可使用：
+我的取舍是“宁可显式 handoff，也不能无限循环”。循环检测可使用：
 
 - 连续相同工具与近似参数；
 - workspace hash / git diff 长时间不变；
@@ -221,5 +221,84 @@ open_questions:
 ### 每个任务都要先生成完整计划吗？
 
 > 不需要。计划成本应与任务不确定性匹配。单文件明确修改可直接执行；跨模块、有高副作用或超过若干步的任务先做轻量计划；架构变更先只读探索并让用户审阅。计划应滚动更新，环境证据推翻假设时允许重规划。
+
+## 我会先守住六个 Runtime 不变量
+
+Agent Loop 很容易写出来，真正难的是让任意异常都不能破坏下面这些条件：
+
+1. **一个逻辑动作只有一个身份。** 重试可以产生多个物理 attempt，但不能让外部系统把它们当成多个业务动作。
+2. **每个工具调用最终闭合。** 成功、失败、拒绝、取消和结果未知都必须形成 terminal result。
+3. **历史事件只解释，不重演。** replay 用来重建状态，绝不能顺便再次执行 Shell、写文件或发布。
+4. **权限只能收缩，不能由模型提升。** 模型可以请求能力，授权主体只能是策略或用户。
+5. **完成必须带证据。** “我已经修好”不是状态转换条件，测试、diff 和 acceptance 才是。
+6. **取消最终会收敛。** 模型流、子进程、后台任务和 Subagent 都必须在可观测时间内结束或进入明确的 `unknown` 状态。
+
+我倾向于把这些不变量写进 reducer 和 property-based test，而不是只放在 system prompt 里。Prompt 能影响模型选择，但不能承担一致性。
+
+## 一次 Turn 更像事务，而不是一次函数调用
+
+假设 Agent 要修复一个鉴权缓存竞态。模型提出运行测试，测试进程成功退出，但 Runtime 在写入 `ToolExecutionFinished` 之前崩溃。恢复时，系统看到的最后一个事实仍然是 `ToolExecutionStarted`。
+
+这时有三个看似合理、实际完全不同的动作：
+
+- 直接重跑：对只读测试通常可以，但若命令包含数据迁移就可能重复副作用；
+- 直接假定成功：会把未验证结果写进上下文；
+- 标记结果未知并 reconcile：最保守，也最符合事实。
+
+因此我会把工具生命周期拆成意图、attempt 和结果三层：
+
+```text
+LogicalAction
+  action_id        # 跨重试稳定
+  intent_hash      # 规范化参数 + scope + workspace revision
+
+ToolAttempt
+  attempt_id       # 每次物理执行唯一
+  action_id
+  started_at
+  executor_id
+  deadline
+
+ToolOutcome
+  action_id
+  status           # succeeded | failed | cancelled | rejected | unknown
+  effect_fingerprint
+  artifact_refs
+```
+
+`action_id` 解决逻辑幂等，`attempt_id` 保留真实执行次数，`effect_fingerprint` 用来恢复时核对外部世界。例如文件编辑的 fingerprint 可以包含目标路径、base hash 和结果 hash；远端发布则应优先使用对方支持的 idempotency key 或查询发布记录。
+
+### 事件落盘和副作用无法原子提交怎么办？
+
+大多数工具无法和本地 event store 做分布式事务。我不会假装存在 exactly-once，而是按工具能力选择：
+
+| 工具类型 | 恢复策略 |
+|---|---|
+| 文件读取、搜索 | 安全重放 |
+| 带 base hash 的文件编辑 | 检查结果 hash；已应用则补记成功，冲突则返回 stale |
+| 可查询状态的远端任务 | 用 action ID 查询并 reconcile |
+| 支持幂等键的 API | 以逻辑 action ID 重试 |
+| 无查询、无幂等的外部动作 | 标记 `unknown_outcome`，禁止自动重放 |
+
+这条边界决定 Runtime 是否可信。只讨论“失败后重试三次”而不讨论未知结果，通常还停留在普通 API 客户端的思路。
+
+## 一个跨文件修改的完整控制流
+
+以“给鉴权客户端增加请求去重，同时不改变公开 API”为例，我会让一次任务经历下面的状态：
+
+```text
+1. 接收目标，抽取 acceptance 与 forbidden changes
+2. 读取仓库规则、Git 基线和当前 dirty diff
+3. 搜索 token refresh 定义、调用方与并发测试
+4. 形成最小假设：竞态发生在 cache miss 到写回之间
+5. 先写可稳定复现的并发测试
+6. 测试失败，记录错误签名与执行环境
+7. 基于 base hash 应用局部 patch
+8. 运行目标测试、相关模块测试和静态检查
+9. 比较最终 diff 与任务范围，确认没有改测试语义
+10. verifier 检查 acceptance，生成带证据的完成事件
+```
+
+关键不是固定这十步，而是每一步都产生下一步可以复用的证据。若第 6 步测试没有稳定失败，就不应假装已经复现；若第 8 步环境发生变化，成功证据必须绑定新的 revision。这样计划才是运行状态，而不是展示给用户看的装饰。
 
 ---

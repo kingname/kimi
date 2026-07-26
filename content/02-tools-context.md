@@ -449,4 +449,113 @@ Kimi Code 公开 changelog 中能看到许多真实边界：上下文溢出后�
 
 > 能由 Runtime 硬约束的安全与状态不变量，不只靠 prompt；需要结构化输入输出的能力放在 Tool；需要模型做语义判断、策略选择和风格控制的部分放 Prompt。比如“不要删除用户文件”应有策略层保护，“搜索代码”应有工具，“优先先读仓库规范”可由 prompt 引导并由 trace 评测。
 
+## 从“有一个工具”到“工具契约”
+
+只定义 JSON Schema 还不够。对 Runtime 来说，一个可生产使用的工具至少要声明六类语义：
+
+```yaml
+name: apply_patch
+schema_version: 4
+effect:
+  type: write
+  scope: workspace
+concurrency:
+  conflict_key: "file:{path}"
+idempotency:
+  mode: compare_and_swap
+approval:
+  risk: medium
+result:
+  max_inline_bytes: 16384
+  full_output: artifact
+recovery:
+  reconcile: compare_file_hash
+```
+
+- `effect` 决定策略和审计，不应由模型自己描述；
+- `conflict_key` 让调度器知道哪些动作必须串行；
+- `idempotency` 决定超时或崩溃后能否安全重试；
+- `approval` 表达的是能力风险，而不是 UI 文案；
+- `result` 约束进入模型上下文的体积；
+- `recovery` 告诉 Runtime 如何确认未知结果。
+
+我会把工具注册分成两步：启动时验证静态契约，执行时再结合 session 权限、workspace revision 和具体参数生成一次 `ExecutionPlan`。这样同一个 `run_command` 在只读容器和用户宿主机上可以有不同策略，但工具名称与模型理解保持稳定。
+
+### 文件编辑为什么要把“意图”和“补丁格式”分开？
+
+模型输出 unified diff 只是表达修改意图的一种编码，不应该成为内部真相。Runtime 可以先把它规范化为：
+
+```text
+EditIntent:
+  path
+  base_hash
+  expected_regions[]
+  replacement_regions[]
+  newline_policy
+  file_mode_policy
+```
+
+之后再选择 patch、CST、LSP WorkspaceEdit 或整文件写入。这样做的价值是：冲突检测、审计和 replay 围绕稳定语义，而不是绑定某种模型最容易生成的文本格式。
+
+## 一个上下文装配实例
+
+仍以“鉴权缓存并发刷新重复请求”为例。初始任务只给出一句自然语言，仓库有 8 万个文件。第一轮召回可能得到：
+
+| 候选 | 召回理由 | 是否立即进入上下文 |
+|---|---|---|
+| `src/auth/cache.py` | `refresh_token` 符号定义 | 是，读取完整类和相邻辅助函数 |
+| `src/client.py` | 调用 `refresh_token` | 是，只取调用路径和错误处理 |
+| `tests/auth/test_cache.py` | 同名模块测试 | 是，优先看并发相关 fixture |
+| `docs/auth.md` | 语义相似 | 只取公开行为约束 |
+| `legacy/auth/cache.py` | 文本命中更高 | 否，路径带 legacy 且无当前调用边 |
+| `vendor/oauth/cache.py` | embedding 很相似 | 否，第三方代码降权 |
+| 最近一次相关 commit | 修改过锁语义 | 摘要进入，必要时展开 diff |
+
+上下文构建器不是把排序前 K 个片段拼起来，而是按角色分配名额：
+
+```text
+目标与禁止项             1.5k tokens
+仓库规则与公开 API         1k tokens
+核心定义                  5k tokens
+调用方与数据流             4k tokens
+测试和失败日志             4k tokens
+当前 diff / plan / history  3k tokens
+工具与输出预留             6k tokens
+```
+
+如果测试刚刚失败，错误堆栈和相关 fixture 的优先级应立即高于历史文档；如果进入最终验证阶段，当前 diff 与 acceptance 又应取代探索阶段的大量 repo map。这说明 context packing 是阶段相关的调度问题，不是一次性的 RAG。
+
+### 怎样知道模型真的使用了召回内容？
+
+仅有 recall@k 不足以说明上下文有效。我会结合三类证据：
+
+1. **干预：** 移除某片段或换成 oracle 片段，观察动作和最终成功率变化；
+2. **行为：** 下一步工具参数、patch 和解释是否能追溯到该片段；
+3. **反事实：** 放入一个高相似但错误的旧实现，检查模型是否被污染。
+
+最终关注的是 `marginal success gain per token`：一个片段多占 2,000 token，却不改变任何决策，就不应因为“相关”而长期驻留。
+
+## 压缩不是摘要写作，而是状态迁移
+
+压缩前后的 session 不要求逐字等价，但必须在关键行为上等价。我会把下面几类信息当作不可丢失字段，而不是交给自由文本摘要碰运气：
+
+```yaml
+goal:
+acceptance:
+active_constraints:
+workspace_revision:
+open_tool_calls:
+decisions:
+  - claim:
+    evidence_refs:
+    status: accepted | rejected | tentative
+failed_attempts:
+  - error_signature:
+    do_not_repeat:
+next_actions:
+artifact_refs:
+```
+
+尤其是“已经否决的方案”必须有一等表示。很多长任务不是忘记正确答案，而是压缩以后把旧错误重新当成新想法。恢复测试应该故意构造这种场景：压缩前否决方案 A，压缩后给出相似线索，检查 Agent 是否再次执行 A。
+
 ---

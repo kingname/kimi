@@ -206,4 +206,74 @@ Kimi Code 的公开实现已经体现了一些 Harness 层优化：MCP 工具支
 
 真正有用的判断力，往往体现在能否发现一个“看似能用”的系统会在哪个边界下必然失败，并设计最小实验验证它。
 
+## 自研之前，先做一张 Build / Adapt / Partner 表
+
+“自研 Harness”不是一个二元决定。更实际的拆法是逐层判断：
+
+| 能力层 | 直接复用成熟产品 | 适配开放生态 | Kimi 自己掌握 |
+|---|---|---|---|
+| 基础终端与编辑体验 | 可以作为分发入口和体验基线 | ACP / IDE adapter | 只有形成差异时才投入 |
+| MCP、LSP、Git 等协议 | 不应重造 | 优先兼容 | 做策略、观测和容错层 |
+| Agent Loop 与状态模型 | 难以从第三方产品控制 | 框架可用于验证 | 核心语义应可控 |
+| Kimi 模型适配 | 第三方通常按通用模型处理 | 提供标准 API | 做专属 prompt/tool/context 联合优化 |
+| Trace 与 Eval | 往往拿不到完整因果链 | 导出协议只能解决一部分 | 决定数据闭环，应该掌握 |
+| 权限与企业治理 | 依赖产品定位 | 对接企业策略 | 与目标用户共同设计 |
+
+这张表的关键不是“核心都自己做”，而是区分差异化控制点与行业公共基础设施。MCP、ACP、LSP 的价值恰恰在于减少重复建设；Runtime 状态、评测和模型联合优化则更接近产品能力本身。
+
+## 一个能证伪自研价值的对照实验
+
+固定同一个 Kimi 模型、同一组仓库任务和相同资源预算，比较：
+
+```text
+A: 成熟第三方 Harness + Kimi 兼容接口
+B: 开源 Harness + 最小 Kimi adapter
+C: Kimi 自有 Harness
+```
+
+实验不能只看一次成功率。至少分解：
+
+```yaml
+result:
+  task_success:
+  severe_regressions:
+context:
+  first_correct_file_latency:
+  retrieval_miss_rate:
+  compaction_recovery_rate:
+tools:
+  invalid_call_rate:
+  repeated_error_rate:
+  stale_write_rate:
+product:
+  user_interventions:
+  patch_acceptance:
+economics:
+  cost_per_success:
+  engineering_maintenance_cost:
+```
+
+如果 C 的优势只来自更高 token 预算或更多重试，就不能证明 Harness 更好；如果优势只出现在少量针对 benchmark 的任务，也不能证明真实产品价值。反过来，如果 C 能在长任务恢复、Kimi 特有工具调用、用户 steering 或真实 patch 接受率上持续领先，才说明自有系统形成了第三方适配无法替代的能力。
+
+### 什么时候应该停止某项自研？
+
+- 同模型 paired eval 长期没有稳定增益；
+- 优势可以通过很薄的开源 adapter 获得；
+- 维护 provider、IDE 或协议兼容消耗了主要研发资源；
+- 真实用户仍主要留在第三方入口，自有体验没有独特任务分布；
+- 拿到的 trace 无法因隐私、授权或复现条件进入有效数据闭环；
+- 自研层阻碍开放生态接入，带来的损失大于控制权收益。
+
+有明确的停止条件，反而能让“自研核心 Harness”这个判断更可信。战略自主不是豁免工程 ROI 的理由。
+
+## Kimi Code 公开实现中值得继续观察的信号
+
+公开文档显示，Kimi Code 会持久化 session 和每个 Agent 的事件流，用于恢复、replay 与请求 trace；Subagent 使用隔离上下文，只把最终结果带回主 Agent；Agent SDK 则复用同一套 CLI 配置、工具、Skills 和 MCP server，把 Runtime 暴露给其他应用。这三件事连起来看，比单个功能更有信息量：
+
+1. session/event stream 说明长任务状态被当作产品基础设施；
+2. Subagent context isolation 说明上下文预算和污染是明确的系统边界；
+3. SDK 说明 Harness 不只服务一个 CLI，而是在形成可复用 Runtime。
+
+这些只能证明公开架构的方向，不能证明内部效果。最终仍应回到实际任务和对照实验。参考 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)、[Agents and Sub-Agents](https://moonshotai.github.io/kimi-code/en/customization/agents.html) 与 [Kimi Agent SDK](https://github.com/MoonshotAI/kimi-agent-sdk)。
+
 ---

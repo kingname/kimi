@@ -350,4 +350,116 @@ safety
 
 检测器只用于提醒或触发重新规划；高误报时不能频繁打断正常探索。
 
+## 一个完整的改动验证：新的上下文重排器值不值得上线
+
+假设我们把检索器从“词法排序”改成“词法 + symbol graph + reranker”。在 500 个仓库任务上，成功率从 41.2% 提升到 44.0%。这个结果还不足以直接上线。
+
+我会继续追下面几层：
+
+### 先看 paired case，而不是两个总体均值
+
+```text
+baseline 成功，candidate 成功：181
+baseline 失败，candidate 失败：265
+baseline 失败，candidate 成功： 39
+baseline 成功，candidate 失败： 15
+```
+
+真正提供信息的是 39 个新增成功和 15 个回归。需要确认：
+
+- 新增成功是否集中在跨文件、符号引用任务，符合改动机制；
+- 15 个回归是否因为 reranker 把精确错误字符串降权；
+- 同一个 repo 是否贡献了大部分提升；
+- 多次运行后配对差异是否稳定；
+- 额外延迟、token 和索引成本是多少。
+
+若提升主要来自预期 slice，且回归有一致根因，才说明实验支持原假设；若所有 slice 都随机涨一点，更可能是环境或采样噪声。
+
+### 再做三个 oracle 实验
+
+1. **Oracle retrieval：** 直接给出正确文件，估计检索改进的成功率上界；
+2. **Oracle rerank：** 保留原候选，只把正确片段放到预算内，隔离排序问题；
+3. **Oracle context budget：** 给候选版本更大窗口，判断回归是否来自新增片段挤走关键信息。
+
+如果 oracle retrieval 成功率仍很低，就不应继续在召回算法上堆复杂度；瓶颈可能已经转移到编辑或验证。
+
+### 上线门禁
+
+```yaml
+primary:
+  task_success_delta: "> 0 with 95% paired CI"
+guardrails:
+  severe_regression_cases: 0
+  secret_exposure_delta: "<= 0"
+  p95_time_to_first_action: "< +15%"
+  cost_per_success: "< +10%"
+rollout:
+  shadow: 100%
+  canary: 5%
+  rollback:
+    - user_cancel_rate > baseline + 2%
+    - severe_slice_regression >= 1
+```
+
+阈值不是通用答案，但必须在看线上结果之前确定。否则每个指标都可以被事后解释。
+
+## Trace 分析要找到“第一次有机会做对却没有做对”
+
+最终报错经常只是最后一张多米诺骨牌。以“测试失败，因为接口参数没更新”为例：
+
+```text
+T+00:00 用户要求迁移 API
+T+00:12 搜索旧方法名，只返回前 20 个结果且标记 truncated
+T+00:28 Agent 读取 3 个调用方，没有继续分页
+T+04:10 修改接口和已看到的调用方
+T+06:20 运行局部测试通过
+T+08:40 全量测试发现异步 worker 仍使用旧参数
+T+10:00 Agent 修复 worker，但又漏掉生成代码
+T+14:00 预算耗尽
+```
+
+“全量测试太晚”不是最早根因。第一次关键偏离发生在 `T+00:28`：工具已经明确结果被截断，Agent 却把它当成完整集合。进一步归因还要区分：
+
+- 工具有没有把 truncation 放在足够显著的位置；
+- Prompt 是否要求处理分页；
+- 模型在相同结构化结果下是否仍忽略；
+- Runtime 是否能在“全仓迁移”任务中自动检查搜索覆盖率。
+
+对应修复可能横跨工具结果 schema、模型行为和 verifier。一个 trace 允许有多个 contributor，但应指定一个可验证的 root cause。
+
+## 我会怎样把这条 trace 变成回归样本
+
+```yaml
+task: 将 fetch_user(id) 迁移为 fetch_user(UserKey)
+repo_revision: fixed-fixture-v3
+setup:
+  occurrences: 37
+  search_page_size: 20
+acceptance:
+  - all_call_sites_migrated
+  - generated_source_not_edited_directly
+  - full_test_suite_passes
+instrumentation_assertions:
+  - pagination_or_alternative_search_used
+  - no_truncated_result_treated_as_complete
+slices:
+  - cross_module
+  - truncated_observation
+  - generated_code
+```
+
+任务结果仍是 primary metric；`instrumentation_assertions` 只用于解释失败。如果某个新策略不走分页却通过符号索引找全了调用方，它不应因为过程与旧方案不同而被判失败。
+
+## 可观测性系统本身也需要预算
+
+完整保存每次 prompt、代码、Shell 输出和模型响应，会迅速变成高成本、高风险的数据湖。我会把 trace 分三档：
+
+| 档位 | 默认内容 | 用途 |
+|---|---|---|
+| 基础 | ID、版本、状态、时长、token、hash、错误类 | 全量指标与 SLO |
+| 诊断 | 脱敏摘要、关键参数、截断预览、artifact 引用 | 经授权的失败分析 |
+| 深度 | 完整输入输出与环境快照 | 短期 debug、严格权限、自动过期 |
+
+采样不能只随机。严重安全事件、baseline/candidate 分歧、新版本首次错误和长任务异常应优先保留；普通成功任务可以低比例采样。这样可观测性服务的是归因，而不是为了“什么都记下来”。
+
 ---
