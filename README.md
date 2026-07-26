@@ -1,6 +1,10 @@
 # Coding Agent 工程实践手册
 
-从一份 Kimi Code 招聘 JD 展开的系统工程笔记。正文按主题拆分在 [`content/`](./content/) 中，构建后生成可直接发布的静态 HTML。
+基于 Kimi 近期 Agent Harness 研发岗位的 JD，结合我自己的工程开发经验，整理成这份 Coding Agent 系统实践指南。
+
+内容涵盖 Agent Runtime、工具系统、仓库级上下文、权限与沙箱、长任务恢复、Subagent、Evaluation、可观测性以及 Harness 的产品与工程价值。正文按主题拆分在 [`content/`](./content/) 中，构建后生成可直接发布的静态 HTML。
+
+项目地址：[github.com/kingname/kimi](https://github.com/kingname/kimi)
 
 ## 本地构建
 
@@ -51,3 +55,7 @@ npm run deploy
 | `07-product-harness.md` | 产品判断、Kimi Code 与 Harness |
 | `08-engineering-notes.md` | 工程问题速查与设计审查 |
 | `09-reading-list.md` | 阅读材料与结语 |
+
+## 版权
+
+Copyright © 2026 青南. All rights reserved.
