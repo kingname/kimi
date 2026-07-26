@@ -18,7 +18,7 @@
     />
     <meta name="twitter:card" content="summary" />
     <title>Coding Agent 工程实践手册</title>
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/{{STYLES_ASSET}}" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -91,6 +91,12 @@
         </div>
       </section>
 
+      <section class="home-preface">
+        <div class="prose home-preface-prose">
+          {{PREFACE_CONTENT}}
+        </div>
+      </section>
+
       <section class="chapter-index" id="chapters">
         <div class="section-intro">
           <div>
@@ -131,6 +137,6 @@
       </div>
     </footer>
 
-    <script type="module" src="/assets/app.js"></script>
+    <script type="module" src="/assets/{{APP_ASSET}}"></script>
   </body>
 </html>

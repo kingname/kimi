@@ -18,7 +18,7 @@
     />
     <meta name="twitter:card" content="summary" />
     <title>Coding Agent 工程实践手册</title>
-    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="stylesheet" href="/assets/styles-b8a28044c9b0.css" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -63,7 +63,7 @@
             整理成这份 Coding Agent 系统实践指南。
           </p>
           <div class="hero-meta">
-            <span>10 个章节</span>
+            <span>9 个章节</span>
             <span>独立阅读</span>
             <span>逐章深入</span>
           </div>
@@ -91,6 +91,40 @@
         </div>
       </section>
 
+      <section class="home-preface">
+        <div class="prose home-preface-prose">
+          <blockquote>
+<p>从一份 Kimi Code 招聘 JD 展开的系统工程笔记</p>
+</blockquote>
+<p>最近看到 Kimi Code 的一份 Agent Harness 研发 JD。它没有把岗位描述停留在“会调用模型”上，而是很直接地写出了 Coding Agent 真正难的部分：执行循环、工具系统、仓库级上下文、长任务恢复、真实 trace 与评测闭环。</p>
+<p>这些问题恰好也是我在工程开发中持续关注的主题。于是我沿着这份 JD 把问题逐层展开，整理成这份公开笔记。它不是岗位题库，也不试图复述某个产品；我更想得到一套可以拿来设计、实现和审查 Coding Agent 的问题框架。</p>
+<p>文中涉及 Kimi Code 的部分只依据公开仓库和文档。实现会持续变化，因此我更关注背后的工程约束，而不是某个版本的类名或参数。</p>
+<h2 id="第二版做了什么改变">第二版做了什么改变<a class="heading-anchor" href="#第二版做了什么改变" aria-label="链接到本节">#</a></h2>
+<p>第一版更像一张知识地图：覆盖面足够大，但一些结论停留在“正确但不够有用”的层面。第二版不再追求每个术语都出现，而是围绕几个会真正决定系统成败的问题展开：</p>
+<ul>
+<li>一次工具调用究竟怎样跨过持久化与外部副作用边界；</li>
+<li>上下文为什么选这些文件，压缩以后又丢掉了什么；</li>
+<li>长任务在哪些 crash point 上会重复执行或无法恢复；</li>
+<li>Subagent 带来的收益是否大于通信、并发和 token 成本；</li>
+<li>一个成功率提升怎样排除环境、grader 和样本噪声；</li>
+<li>自研 Harness 的价值如何用同模型对照实验验证。</li>
+</ul>
+<p>每个核心章节都尽量给出一个具体场景、关键数据结构、失败路径和验证方法。没有真实证据支持的地方，我宁愿明确写成判断，也不把它包装成事实。</p>
+<h2 id="这份笔记怎么读">这份笔记怎么读<a class="heading-anchor" href="#这份笔记怎么读" aria-label="链接到本节">#</a></h2>
+<p>可以先建立一条主线：模型负责在不确定信息里做决策，Runtime 负责把决策约束为可执行、可恢复、可审计的行为，Evaluation 则负责证明系统是否真的变好。</p>
+<p>阅读具体方案时，我习惯追问五件事：</p>
+<ol>
+<li>状态放在哪里，崩溃后能否恢复？</li>
+<li>副作用边界在哪里，未知结果会不会被重复执行？</li>
+<li>上下文为什么是这些，而不是更多或更少？</li>
+<li>失败最早从哪一步开始，怎样用最小实验归因？</li>
+<li>改进用什么任务、指标和对照组证明？</li>
+</ol>
+<p>像“加缓存、重试、RAG 或 Multi-agent”这样的答案通常不够。更关键的是缓存键与失效条件、错误分类和重试语义、检索污染、Agent 之间隔离的状态，以及成功率提升是否值得新增的成本和复杂度。</p>
+
+        </div>
+      </section>
+
       <section class="chapter-index" id="chapters">
         <div class="section-intro">
           <div>
@@ -103,16 +137,6 @@
           </p>
         </div>
         <div class="chapter-cards">
-
-      <a class="chapter-card" href="/chapters/preface/">
-        <div class="chapter-card-top">
-          <span>00</span>
-          <small>1 MIN</small>
-        </div>
-        <h3>写作缘起与方法</h3>
-        <p>为什么从一份 Agent Harness JD 出发，以及这份实践指南采用什么问题框架。</p>
-        <div class="chapter-card-action">阅读本章 <span>→</span></div>
-      </a>
 
       <a class="chapter-card" href="/chapters/agent-runtime/">
         <div class="chapter-card-top">
@@ -230,6 +254,6 @@
       </div>
     </footer>
 
-    <script type="module" src="/assets/app.js"></script>
+    <script type="module" src="/assets/app-dfafcd0bed43.js"></script>
   </body>
 </html>

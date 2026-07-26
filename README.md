@@ -2,7 +2,7 @@
 
 基于 Kimi 近期 Agent Harness 研发岗位的 JD，结合我自己的工程开发经验，整理成这份 Coding Agent 系统实践指南。
 
-内容涵盖 Agent Runtime、工具系统、仓库级上下文、权限与沙箱、长任务恢复、Subagent、Evaluation、可观测性以及 Harness 的产品与工程价值。正文按主题拆分在 [`content/`](./content/) 中；构建后生成一个章节首页和 10 个独立章节页面。
+内容涵盖 Agent Runtime、工具系统、仓库级上下文、权限与沙箱、长任务恢复、Subagent、Evaluation、可观测性以及 Harness 的产品与工程价值。正文按主题拆分在 [`content/`](./content/) 中；“写作缘起与方法”直接呈现在首页，其余内容生成 9 个独立章节页面。
 
 项目地址：[github.com/kingname/kimi](https://github.com/kingname/kimi)
 
@@ -16,7 +16,7 @@ npm run build
 构建产物位于 `dist/`：
 
 - `dist/index.html`：章节首页；
-- `dist/chapters/<slug>/index.html`：各主题的独立阅读页面；
+- `dist/chapters/<slug>/index.html`：9 个主题的独立阅读页面；
 - `dist/markdown/`：可直接访问的 Markdown 原文。
 
 根目录的 `index.html` 是章节首页的静态快照。

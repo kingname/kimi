@@ -722,10 +722,28 @@ a {
   display: none;
 }
 
+.home-preface {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 94px 32px 18px;
+}
+
+.home-preface-prose {
+  max-width: 800px;
+}
+
+.home-preface-prose > blockquote:first-child {
+  margin-top: 0;
+}
+
+.home-preface-prose h2:first-of-type {
+  margin-top: 48px;
+}
+
 .chapter-index {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 104px 28px 120px;
+  padding: 86px 28px 120px;
 }
 
 .section-intro {
@@ -1138,6 +1156,10 @@ a {
 
   .chapter-index {
     padding: 78px 20px 90px;
+  }
+
+  .home-preface {
+    padding: 68px 20px 4px;
   }
 
   .section-intro,

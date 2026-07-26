@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -81,6 +82,10 @@ function countReadingMinutes(markdown) {
   return Math.max(1, Math.round(units.length / 500));
 }
 
+function contentHash(content) {
+  return createHash("sha256").update(content).digest("hex").slice(0, 12);
+}
+
 function renderMarkdown(markdown) {
   const slugger = new GithubSlugger();
   const headings = [];
@@ -133,23 +138,44 @@ await rm(distDir, { recursive: true, force: true });
 await mkdir(assetsDir, { recursive: true });
 await mkdir(markdownDir, { recursive: true });
 
+const stylesContent = await readFile(join(root, "src", "styles.css"));
+const stylesAsset = `styles-${contentHash(stylesContent)}.css`;
+await writeFile(join(assetsDir, stylesAsset), stylesContent);
+
+const appBundle = await build({
+  entryPoints: [join(root, "src", "app.js")],
+  bundle: true,
+  minify: true,
+  format: "esm",
+  target: ["es2022"],
+  write: false
+});
+const appContent = appBundle.outputFiles[0].contents;
+const appAsset = `app-${contentHash(appContent)}.js`;
+await writeFile(join(assetsDir, appAsset), appContent);
+
 const files = (await readdir(contentDir))
   .filter((file) => file.endsWith(".md"))
   .sort((a, b) => a.localeCompare(b));
 
 const chapters = [];
-for (const [index, file] of files.entries()) {
+let prefaceMarkdown = "";
+for (const file of files) {
   const raw = await readFile(join(contentDir, file), "utf8");
   const meta = chapterMeta[file];
   if (!meta) throw new Error(`Missing chapter metadata for ${file}`);
+  await cp(join(contentDir, file), join(markdownDir, file));
+  if (file === "00-preface.md") {
+    prefaceMarkdown = raw;
+    continue;
+  }
   chapters.push({
     ...meta,
     file,
-    number: String(index).padStart(2, "0"),
+    number: file.slice(0, 2),
     markdown: raw,
     readingTime: countReadingMinutes(raw)
   });
-  await cp(join(contentDir, file), join(markdownDir, file));
 }
 
 const now = new Date();
@@ -175,11 +201,17 @@ const cards = chapters
   )
   .join("\n");
 
+const { html: prefaceContent } = renderMarkdown(
+  prefaceMarkdown.replace(/^# .+\n+/, "")
+);
 const homeTemplate = await readFile(join(root, "src", "template.html"), "utf8");
 const homeHtml = homeTemplate
   .replace("{{CHAPTER_CARDS}}", cards)
+  .replace("{{PREFACE_CONTENT}}", prefaceContent)
   .replaceAll("{{CHAPTER_COUNT}}", String(chapters.length))
   .replaceAll("{{UPDATED_ISO}}", updatedIso)
+  .replaceAll("{{STYLES_ASSET}}", stylesAsset)
+  .replaceAll("{{APP_ASSET}}", appAsset)
   .replace(/[ \t]+$/gm, "");
 
 await writeFile(join(distDir, "index.html"), homeHtml);
@@ -203,20 +235,14 @@ for (const [index, chapter] of chapters.entries()) {
     .replaceAll("{{SOURCE_FILE}}", escapeHtml(chapter.file))
     .replaceAll("{{UPDATED_ISO}}", updatedIso)
     .replaceAll("{{UPDATED_DISPLAY}}", updatedDisplay)
+    .replaceAll("{{STYLES_ASSET}}", stylesAsset)
+    .replaceAll("{{APP_ASSET}}", appAsset)
     .replace(/[ \t]+$/gm, "");
   await writeFile(join(outputDir, "index.html"), html);
 }
 
-await cp(join(root, "src", "styles.css"), join(assetsDir, "styles.css"));
 await cp(join(root, "public", "_headers"), join(distDir, "_headers"));
 
-await build({
-  entryPoints: [join(root, "src", "app.js")],
-  bundle: true,
-  minify: true,
-  format: "esm",
-  target: ["es2022"],
-  outfile: join(assetsDir, "app.js")
-});
-
-console.log(`Built landing page and ${chapters.length} chapter pages into dist/.`);
+console.log(
+  `Built landing page and ${chapters.length} chapter pages with ${stylesAsset} and ${appAsset}.`
+);
