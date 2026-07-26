@@ -43,8 +43,11 @@ if (chapterDirectories.length !== markdownFiles.length - 1) {
     `Expected preface on the landing page and one page per remaining Markdown file, found ${chapterDirectories.length} pages for ${markdownFiles.length} sources.`
   );
 }
-if (!html.includes("第二版做了什么改变") || !html.includes("这份笔记怎么读")) {
+if (!html.includes("这份笔记怎么读")) {
   throw new Error("Landing page is missing the preface content.");
+}
+if (html.includes("第二版做了什么改变")) {
+  throw new Error("Landing page still contains the removed revision-history section.");
 }
 
 for (const chapter of chapterDirectories) {
