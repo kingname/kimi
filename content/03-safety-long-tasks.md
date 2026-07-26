@@ -350,4 +350,30 @@ TTFT
 
 我会给每次目标修订一个 `goal_revision`，tool call、plan、Subagent task 都绑定创建时的 revision。迟到结果仍可进入 trace，但默认不能影响新目标下的决策。这比依赖模型“记得用户刚才改主意了”可靠得多。
 
+## Kimi Code 公开实现：Approval、Hooks 与模式边界
+
+Kimi Code 当前公开了 Manual、YOLO 和 Auto 三种权限模式。Manual 下，有副作用的工具需要批准，也可以在 session 内批准同类动作；YOLO 跳过常规工具批准，但退出 Plan 仍需确认，敏感文件仍有额外保护；Auto 则面向真正的无人值守执行。交互中还可以用 `Ctrl-S` 注入新要求，或中断当前 turn。参见 [Interact with Kimi Code](https://moonshotai.github.io/kimi-code/en/guides/interaction.html)。
+
+这组设计让我觉得有两条边界必须分开：
+
+1. **用户体验模式不是底层 capability。** “自动运行”决定什么时候询问用户，不应该让模型凭一句话获得新的文件、网络或部署权限。
+2. **中断不是撤销。** UI 停止生成之后，已经启动的子进程、Subagent 和外部动作仍要由 Runtime 收敛。
+
+Kimi Code 的 [Hooks](https://moonshotai.github.io/kimi-code/en/customization/hooks) 更能说明第一点。Hook 可以监听 `PreToolUse`、`PostToolUse`、`PermissionRequest`、`SessionStart`、`SubagentStart` 等生命周期事件；部分事件可以通过退出码阻止动作。但官方文档明确写出：Hook 出错或超时通常采用 fail-open，因此适合做提醒、审计和轻量拦截，不应成为高风险动作的唯一安全边界。
+
+我的判断是，Hooks 是扩展面，Policy Engine 才是安全边界。企业可以用 Hook 检查提交信息、通知审计系统或提示用户，但“能否读取密钥”“能否向外部域名发送数据”“能否发布生产环境”必须由 Runtime 在工具执行前强制判断。否则一个脚本超时就可能把安全策略变成旁路。
+
+我会把 Kimi Code 公开的模式和生命周期事件直接转成测试矩阵：
+
+| 场景 | Manual | YOLO | Auto | 必查结果 |
+|---|---|---|---|---|
+| 只读仓库文件 | 自动 | 自动 | 自动 | 无多余批准 |
+| 普通文件编辑 | 询问 | 自动 | 自动 | 审计中保留真实 effect |
+| 读取敏感文件 | 强保护 | 仍有保护 | 按 Auto 契约 | 不可被 Subagent 绕过 |
+| 退出 Plan 并开始修改 | 确认 | 仍确认 | 自动 | plan 与执行边界清楚 |
+| Hook 超时或异常 | 不依赖 Hook 放行高风险动作 | 同左 | 同左 | policy 结果稳定 |
+| 用户中途改变目标 | 取消旧 revision | 取消旧 revision | 按无人值守策略 | 迟到结果不得污染新目标 |
+
+这张矩阵既验证产品承诺，也能发现“主 Agent 会拦、Subagent 不会拦”或“YOLO 意外变成全权限”这类 Harness 特有的漏洞。
+
 ---

@@ -504,4 +504,36 @@ IDE 与 CLI 的差异：
 
 架构成熟度不体现在服务数量，而体现在把组件放回单进程后，语义仍然清楚；把组件拆到多机后，不变量仍然成立。
 
+## Kimi Code 公开实现：CLI、ACP、SDK 是同一 Runtime 的三种表面
+
+从公开接口看，Kimi Code 已经不只是一个终端 UI：
+
+- CLI 负责交互式 session、审批、steering、恢复和本地工具体验；
+- `kimi acp` 通过 stdio 上的 JSON-RPC 对接 Zed、JetBrains 等客户端，并支持 session 加载、图片、嵌入上下文与 MCP；
+- Kimi Agent SDK 是对 Kimi Code Runtime 的程序化封装，复用配置、工具、Skills 和 MCP，并向调用方暴露 session、消息与 approval。
+
+来源分别见 [Kimi ACP](https://moonshotai.github.io/kimi-code/en/reference/kimi-acp.html) 和 [Kimi Agent SDK](https://github.com/MoonshotAI/kimi-agent-sdk)。
+
+我的架构判断是，三者不应该各自拥有一套 Agent Loop。更清晰的边界是：
+
+```text
+Terminal UI ─┐
+ACP adapter ─┼─> Session / Turn API ─> Runtime ─> Policy / Tools / Model Gateway
+Agent SDK  ──┘                         │
+                                      └─> Event stream / Artifacts / Trace
+```
+
+这会导出几条很具体的设计约束：
+
+- IDE 断开只意味着订阅者消失，不等于取消 session；
+- approval 是 Runtime 事件，CLI 面板、IDE 对话框和 SDK callback 只是不同呈现；
+- ACP 的 `loadSession` 要恢复同一事实流，不能创建一个内容相似的新会话；
+- SDK 调用和 CLI 操作必须经过同一权限与工具契约，不能形成“程序化入口默认全放行”的旁路；
+- adapter 可以协商客户端能力，但不能改变已经发生的副作用和 session 顺序；
+- stable 与 `unstable_*` 协议应有不同兼容承诺，避免实验能力锁死核心 Runtime。
+
+以“IDE 在 Bash 执行期间断线，十秒后从另一台客户端恢复”为例，正确行为不是让 Bash 跟着连接死亡，也不是无条件继续。Runtime 要根据任务策略持有执行权，把日志持续写入 artifact；新客户端通过 session sequence 补齐事件；若期间产生 approval，任务进入可恢复的 waiting 状态。只有用户明确 cancel，取消信号才向进程树和 Subagent 传播。
+
+这套分层也解释了模型公司为什么需要自己的 Harness：不是为了拥有三个 UI，而是为了让同一套 Kimi 运行语义在终端、IDE 和第三方应用里保持一致，同时能从跨入口的失败中沉淀同一种 trace 与 eval。
+
 ---

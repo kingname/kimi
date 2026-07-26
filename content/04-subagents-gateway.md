@@ -268,6 +268,32 @@ Internal IR
 
 但是任务目标、权限、workspace revision 和历史副作用不能随模型变化。模型是可替换决策器，Runtime 状态不是它的私有记忆。
 
-Kimi Code 的公开文档显示，Subagent 使用独立上下文，只将最终结果带回主 Agent；session 中每个 Agent 也有独立事件流用于恢复和 replay。这类设计的价值正是把上下文污染和运行状态分开，而不是简单增加并行度。参见 [Agents and Sub-Agents](https://moonshotai.github.io/kimi-code/en/customization/agents.html) 与 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)。
+## Kimi Code 公开实现：Subagent 隔离与 Gateway 兼容
+
+Kimi Code 内置的 `coder`、`explore`、`plan` 并不只是三套角色提示词：`coder` 可以读写并执行命令，`explore` 以只读探索为主，`plan` 负责规划且不使用 Shell。Subagent 接收明确任务后使用独立上下文，主 Agent 默认只接收最终结果；权限从父级继承，每个 Agent 还有独立事件流用于恢复和 replay。参见 [Agents and Sub-Agents](https://moonshotai.github.io/kimi-code/en/customization/agents.html) 与 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)。
+
+这里最值得借鉴的不是 Agent 数量，而是“能力配置 + 上下文隔离 + 事件隔离”同时存在。只写“你是一名只读研究员”仍然可能调用写工具；从工具层移除写能力，才形成可验证的约束。只给 Subagent 一个新 prompt，也没有解决历史污染；为它建立独立 context，再让输出通过结构化交付物回主 Agent，隔离才真正成立。
+
+如果把这套公开设计用于一次真实任务，我会这样拆：
+
+```text
+explore A：定位定义、调用图和仓库规则，不写文件
+explore B：复现失败并整理错误签名，不改测试
+coder：在指定目录和 base revision 上提交最小 patch
+plan：当任务涉及迁移或多个依赖阶段时，维护约束与验收顺序
+主 Agent：合并证据、处理冲突、执行最终验证
+```
+
+真正需要评测的是：Subagent 是否减少主上下文污染、是否缩短首次找到正确文件的时间、结果过期时能否被拒绝、总成本是否仍然划算。并行数本身不构成产品价值。
+
+另一侧是 Gateway。Kimi Code 的公开 Changelog 长期包含 provider 差异相关修复，例如严格的 tool call ID、不同上下文窗口、工具调用历史修复和 schema 兼容。这说明“改一下 API 地址就能接入 Kimi 模型”只覆盖了最薄的一层。模型请求能成功返回，不等于：
+
+- 中断历史在目标 provider 下仍然合法；
+- 并行 tool call 与 result 能正确配对；
+- context limit 与缓存边界被正确计算；
+- Kimi 适合的工具描述、结果粒度和 compaction 策略已经生效；
+- 流式中断、重试和 usage 都具有一致语义。
+
+因此我会把 Gateway conformance 做成可执行用例：同一份内部 IR 分别经过各 adapter，验证 tool call round-trip、并行结果顺序、中断修复、图片/缓存块、错误归一化和 token 计数。Kimi 自有 Harness 的优势不该只是“默认填好了 Kimi 的 endpoint”，而应该体现在这些语义已经围绕模型和 Runtime 联合调过。
 
 ---

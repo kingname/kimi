@@ -276,4 +276,18 @@ economics:
 
 这些只能证明公开架构的方向，不能证明内部效果。最终仍应回到实际任务和对照实验。参考 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)、[Agents and Sub-Agents](https://moonshotai.github.io/kimi-code/en/customization/agents.html) 与 [Kimi Agent SDK](https://github.com/MoonshotAI/kimi-agent-sdk)。
 
+把公开能力放回 Harness 分层，会更容易看出它们不是互不相关的功能清单：
+
+| Kimi Code 公开表面 | 背后的 Harness 能力 | 我会追问的效果指标 |
+|---|---|---|
+| session、`wire.jsonl`、resume | 事件模型与恢复 | crash recovery 成功率、重复副作用 |
+| compact 与带 hint 压缩 | 长上下文状态迁移 | 压缩后成功率、重复失败方案 |
+| `coder` / `explore` / `plan` | 能力隔离与任务调度 | 首次正确文件耗时、冲突率、成本 |
+| Manual / YOLO / Auto | 风险分层与用户控制 | 越权率、批准疲劳、无人值守完成率 |
+| Hooks 与 MCP | 扩展生态 | 接入成本、策略旁路率、故障隔离 |
+| ACP 与 Agent SDK | Runtime 产品化 | 跨入口语义一致性、session 复用率 |
+| provider / tool history 修复 | Model Gateway | 无效请求率、恢复率、切换模型回归 |
+
+如果这些指标长期没有改善，那么功能再完整也不能证明自有 Harness 有价值；如果同一个 Runtime 能让 Kimi 模型在恢复、工具使用、上下文效率和多入口一致性上持续获益，它才真正成为模型能力的一部分。
+
 ---

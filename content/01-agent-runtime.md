@@ -301,4 +301,32 @@ ToolOutcome
 
 关键不是固定这十步，而是每一步都产生下一步可以复用的证据。若第 6 步测试没有稳定失败，就不应假装已经复现；若第 8 步环境发生变化，成功证据必须绑定新的 revision。这样计划才是运行状态，而不是展示给用户看的装饰。
 
+## Kimi Code 公开实现：Session 是 Runtime 的事实边界
+
+Kimi Code 的公开文档里，有一个比“支持继续会话”更值得注意的细节：session 不只保存聊天文本，还会为每个 Agent 保存独立的 `wire.jsonl` 事件流。它既用于恢复和 replay，也保留模型请求、工具定义、MCP 工具列表等请求 trace；session 本身则用 `state.json` 保存元数据。参见 [Sessions and context](https://moonshotai.github.io/kimi-code/en/guides/sessions.html)。
+
+这部分是公开事实。我的工程判断是：Kimi Code 的 Runtime 已经把“可恢复的执行历史”和“给用户看的对话”当成了两种不同的数据。这个区分很重要，因为 transcript 只能说明模型和用户说过什么，event stream 才能说明工具是否开始、结果是否闭合、哪个 Agent 在什么上下文里执行过。
+
+公开 Changelog 中出现过几类很有代表性的修复：
+
+- turn 被打断在 tool call 与 tool result 之间时，恢复后不能丢掉后续用户消息；
+- provider 对 tool call ID 有严格要求时，要处理重复 ID；
+- compaction 交接需要保留最新意图、关键工具结果、已有决策、待解决问题和后续计划；
+- 中断留下的未闭合工具调用，需要恢复成协议合法、语义明确的历史。
+
+这些条目单看像边角 bug，连起来却刚好覆盖了 Runtime 最难的几条不变量：事件闭合、顺序一致、恢复幂等和状态交接。版本细节可在官方 [Changelog](https://moonshotai.github.io/kimi-code/en/release-notes/changelog.html) 中核对。
+
+如果由我验证这套设计，我不会只测“关闭终端后能不能继续聊天”，而会在边界上故意杀进程：
+
+```text
+模型响应完成 / tool call 尚未落盘
+tool call 已落盘 / 工具尚未启动
+工具产生副作用 / tool result 尚未落盘
+用户 steering 到达 / 旧 turn 尚未结束
+compaction snapshot 写入 / 新上下文尚未启用
+Subagent 完成 / 主 Agent 尚未接收结果
+```
+
+每个 crash point 都检查三件事：副作用有没有重复、事件能否收敛到唯一终态、恢复后的 Agent 是否仍在同一个目标和 workspace revision 上。对 Kimi 这种要承载长时间软件工程任务的 Harness 来说，这比 Agent Loop 写得多漂亮更能说明 Runtime 是否成熟。
+
 ---

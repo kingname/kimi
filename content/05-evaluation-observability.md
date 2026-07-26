@@ -462,4 +462,28 @@ slices:
 
 采样不能只随机。严重安全事件、baseline/candidate 分歧、新版本首次错误和长任务异常应优先保留；普通成功任务可以低比例采样。这样可观测性服务的是归因，而不是为了“什么都记下来”。
 
+## Kimi Code 公开实现：把 Changelog 变成失败分类表
+
+一个成熟 Harness 的真实难点，往往不会完整出现在架构图里，反而散落在版本记录中。Kimi Code 的公开 [Changelog](https://moonshotai.github.io/kimi-code/en/release-notes/changelog.html) 出现过这些修复方向：
+
+| 公开修复线索 | 对应失败类别 | 应沉淀的回归用例 |
+|---|---|---|
+| 中断发生在 tool call 与 result 之间 | 协议闭合与 crash recovery | 在每个工具边界 kill，再恢复 session |
+| 恢复后丢失稍后到达的用户消息 | event ordering / steering | 让新消息与中断响应并发到达 |
+| 严格 provider 下出现重复 tool call ID | Gateway conformance | 并行调用、重试、切换模型后检查 ID 唯一性 |
+| context overflow 或重复 compaction | 状态迁移与预算控制 | 长任务多次压缩，检查目标和负面知识 |
+| compaction handoff 缺少后续计划 | 长程一致性 | 压缩后继续未完成的跨文件任务 |
+| 子进程未正确退出 | 取消传播与资源泄漏 | cancel 后统计进程、端口和文件句柄 |
+
+这些是我根据公开修复做的工程归类，不代表 Kimi 内部的正式 taxonomy。它的价值在于：每一次线上修复都应该产生一个最小、稳定、可以反复运行的 adversarial case。只修代码、不补 eval，下一次换模型、换 provider 或重构 Runtime 时，同类问题很容易以另一种形式回来。
+
+Kimi Code 的 session 事件流也给 trace replay 提供了基础：每个 Agent 的 `wire.jsonl` 可以保留请求轨迹，适合还原“模型看到了什么、工具集合是什么、结果以什么顺序返回”。但 replay 不能简单等同于把 JSONL 再喂一遍：
+
+1. 外部副作用必须 stub 或在隔离环境中执行；
+2. workspace、模型、prompt、tool schema 和配置版本必须绑定；
+3. provider 非确定性要通过多次 rollout 表达，而不是期待逐 token 一致；
+4. 完整 trace 可能包含源代码、路径、命令与敏感参数，导出和保留期限要受控。
+
+如果我要评估 Kimi 新版本，不会只跑 SWE-bench 总分。我会从公开失败分类中挑一组 Harness regression suite：中断恢复、连续 compaction、Subagent 迟到、工具输出截断、严格 provider 协议、用户 steering 和后台进程收敛。模型能力题回答“会不会做”，这组测试回答“系统能不能可靠地让它做完”。
+
 ---
