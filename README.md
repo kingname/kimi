@@ -1,0 +1,53 @@
+# Coding Agent 工程实践手册
+
+从一份 Kimi Code 招聘 JD 展开的系统工程笔记。正文按主题拆分在 [`content/`](./content/) 中，构建后生成可直接发布的静态 HTML。
+
+## 本地构建
+
+```bash
+npm ci
+npm run build
+```
+
+构建产物位于 `dist/`，根目录的 `index.html` 是同一份可直接打开的静态快照。
+
+本地使用 Cloudflare Pages 运行：
+
+```bash
+npm run dev
+```
+
+## 发布到 Cloudflare Pages
+
+在 Cloudflare Dashboard 中连接本 GitHub 仓库，使用以下设置：
+
+| 设置 | 值 |
+|---|---|
+| Framework preset | None |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Root directory | `/` |
+| Node.js version | `22` |
+
+后续每次推送到默认分支都会触发新的 Pages 构建。也可以在完成 `wrangler login` 后直接发布：
+
+```bash
+npm run deploy
+```
+
+项目不依赖服务端运行时、数据库或环境变量。Cloudflare Pages 配置在 [`wrangler.jsonc`](./wrangler.jsonc)；仓库内不包含 GPT Sites 配置。
+
+## 内容结构
+
+| 文件 | 主题 |
+|---|---|
+| `00-preface.md` | 写作缘起与阅读方法 |
+| `01-agent-runtime.md` | JD 问题地图、Agent Runtime |
+| `02-tools-context.md` | 工具系统、仓库级上下文 |
+| `03-safety-long-tasks.md` | 安全、沙箱、长任务与恢复 |
+| `04-subagents-gateway.md` | Subagent、调度、Model Gateway |
+| `05-evaluation-observability.md` | Evaluation、Trace、可观测性 |
+| `06-system-design-failures.md` | 系统设计与故障分析 |
+| `07-product-harness.md` | 产品判断、Kimi Code 与 Harness |
+| `08-engineering-notes.md` | 工程问题速查与设计审查 |
+| `09-reading-list.md` | 阅读材料与结语 |
