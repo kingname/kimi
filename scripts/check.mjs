@@ -21,6 +21,7 @@ const forbidden = ["面试宝典", "90 秒自我介绍", ".openai/hosting.json",
 const missing = [
   "https://github.com/kingname/kimi",
   "模型公司为什么仍然需要自己的 Harness",
+  "主流 Coding Agent 的路线与取舍",
   "Coding Agent 工程实践手册"
 ].filter((text) => !html.includes(text));
 const leaked = forbidden.filter((text) => html.includes(text));

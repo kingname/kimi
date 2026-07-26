@@ -53,12 +53,17 @@ const chapterMeta = {
     title: "产品判断与自研 Harness",
     description: "已有成熟 Coding Agent 时，模型公司为什么仍然值得维护自己的 Harness。"
   },
-  "08-engineering-notes.md": {
+  "08-agent-landscape.md": {
+    slug: "agent-landscape",
+    title: "主流 Coding Agent 的路线与取舍",
+    description: "比较 Codex、Claude Code、Kimi Code、DeepSeek TUI 与 TRAE 的产品边界、优势和代价。"
+  },
+  "09-engineering-notes.md": {
     slug: "engineering-notes",
     title: "工程问题与实现检查",
     description: "用于实现和设计审查的高密度索引，以及一个最小 Coding Agent 练习。"
   },
-  "09-reading-list.md": {
+  "10-reading-list.md": {
     slug: "reading-list",
     title: "推荐阅读与结语",
     description: "继续研究 Coding Agent 系统工程时值得回到的官方资料、论文和项目。"
